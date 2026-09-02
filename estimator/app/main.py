@@ -1,5 +1,8 @@
 from fastapi import FastAPI
 
+from app.api.routes.estimates import router as estimates_router
+
+
 app = FastAPI(
     title="eArchitect Estimator",
     description="Material quantity and construction cost estimation service",
@@ -21,3 +24,6 @@ def version():
         "service": "eArchitect-estimator",
         "version": "0.1.0",
     }
+
+
+app.include_router(estimates_router)
