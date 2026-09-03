@@ -12,7 +12,11 @@ from app.core.constants import (
     DEFAULT_FLOORING_WASTAGE_PERCENT,
     DEFAULT_MASONRY_WASTAGE_PERCENT,
     DEFAULT_MORTAR_JOINT_M,
+    DEFAULT_MORTAR_RATIO_CEMENT,
+    DEFAULT_MORTAR_RATIO_SAND,
     DEFAULT_STEEL_KG_PER_SQFT,
+    DEFAULT_PLASTER_CEMENT_RATIO,
+    DEFAULT_PLASTER_SAND_RATIO,
     DEFAULT_PLASTER_THICKNESS_M,
     DEFAULT_CONCRETE_AGGREGATE_RATIO,
     SQFT_TO_SQM,
@@ -123,6 +127,89 @@ class QuantityCalculator:
             "total_unit": "m3",
         }
 
+    def calculate_mortar_quantity(
+        self,
+        masonry_volume_m3: float,
+        brick_count: int,
+    ) -> dict:
+        """
+        Estimate masonry mortar and its cement/sand components.
+
+        This is an estimation-level calculation. Mortar wastage is
+        applied once to the base mortar volume.
+        """
+
+        brick_volume = (
+            brick_count
+            * DEFAULT_BRICK_LENGTH_M
+            * DEFAULT_BRICK_WIDTH_M
+            * DEFAULT_BRICK_HEIGHT_M
+        )
+
+        base_mortar_volume = max(
+            masonry_volume_m3 - brick_volume,
+            0.0,
+        )
+
+        wastage_quantity = (
+            base_mortar_volume
+            * DEFAULT_MASONRY_WASTAGE_PERCENT
+            / 100
+        )
+
+        total_mortar_volume = (
+            base_mortar_volume + wastage_quantity
+        )
+
+        dry_volume = (
+            total_mortar_volume
+            * DEFAULT_CONCRETE_DRY_VOLUME_FACTOR
+        )
+
+        total_ratio = (
+            DEFAULT_MORTAR_RATIO_CEMENT
+            + DEFAULT_MORTAR_RATIO_SAND
+        )
+
+        cement_volume = (
+            dry_volume
+            * DEFAULT_MORTAR_RATIO_CEMENT
+            / total_ratio
+        )
+
+        sand_volume = (
+            dry_volume
+            * DEFAULT_MORTAR_RATIO_SAND
+            / total_ratio
+        )
+
+        cement_weight_kg = cement_volume * 1440.0
+        cement_bags = cement_weight_kg / CEMENT_BAG_WEIGHT_KG
+
+        return {
+            "material": "mortar",
+            "base_quantity": round(base_mortar_volume, 3),
+            "base_unit": "m3",
+            "wastage_percent": DEFAULT_MASONRY_WASTAGE_PERCENT,
+            "wastage_quantity": round(wastage_quantity, 3),
+            "total_quantity": round(total_mortar_volume, 3),
+            "total_unit": "m3",
+            "dry_volume": round(dry_volume, 3),
+            "dry_volume_unit": "m3",
+            "cement": {
+                "quantity": round(cement_bags, 2),
+                "unit": "bags",
+                "volume_m3": round(cement_volume, 3),
+                "weight_kg": round(cement_weight_kg, 2),
+            },
+            "sand": {
+                "quantity": round(sand_volume, 3),
+                "unit": "m3",
+            },
+            "mix_ratio": "1:6",
+            "dry_volume_factor": DEFAULT_CONCRETE_DRY_VOLUME_FACTOR,
+        }
+
     def calculate_brick_quantity(
         self,
         masonry_volume_m3: float,
@@ -185,50 +272,41 @@ class QuantityCalculator:
                 "height_m": DEFAULT_BRICK_HEIGHT_M,
             },
             "mortar_joint_m": DEFAULT_MORTAR_JOINT_M,
+            "wastage_included": True,
+            "wastage_source": "masonry",
         }
 
     def calculate_steel_quantity(
         self,
         built_up_area_sqft: float,
-    ) -> Dict[str, Any]:
-        """
-        Estimate reinforcement steel quantity from built-up area.
-
-        This is an estimation allowance only.
-        Actual reinforcement quantities must come from structural design.
-        """
-
+    ) -> dict:
         if built_up_area_sqft <= 0:
             raise ValueError(
                 "Built-up area must be greater than zero."
             )
 
-        steel_quantity_kg = (
-            built_up_area_sqft
-            * DEFAULT_STEEL_KG_PER_SQFT
+        base_quantity = (
+            built_up_area_sqft * DEFAULT_STEEL_KG_PER_SQFT
         )
 
-        steel_quantity_tonnes = (
-            steel_quantity_kg / 1000
-        )
+        wastage_percent = 5.0
+        wastage_quantity = base_quantity * wastage_percent / 100
+        total_quantity = base_quantity + wastage_quantity
 
         return {
             "material": "reinforcement_steel",
-            "quantity": round(
-                steel_quantity_kg,
-                2,
-            ),
-            "unit": "kg",
-            "quantity_tonnes": round(
-                steel_quantity_tonnes,
-                3,
-            ),
+            "base_quantity": round(base_quantity, 2),
+            "base_unit": "kg",
+            "wastage_percent": wastage_percent,
+            "wastage_quantity": round(wastage_quantity, 2),
+            "total_quantity": round(total_quantity, 2),
+            "total_unit": "kg",
+            "quantity_tonnes": round(total_quantity / 1000, 3),
             "rate": DEFAULT_STEEL_KG_PER_SQFT,
             "rate_unit": "kg_per_sqft",
             "basis": "built_up_area",
             "assumption": True,
         }
-
 
     def calculate_concrete_volume(
         self,
@@ -264,122 +342,69 @@ class QuantityCalculator:
             "assumption": True,
         }
 
-    def calculate_concrete_materials(
-        self,
-        concrete_volume_m3: float,
-    ) -> Dict[str, Any]:
-        """
-        Convert concrete volume into estimated cement, sand,
-        and aggregate quantities using the configured mix ratio.
-
-        This is an estimation-level calculation and not a
-        structural mix-design calculation.
-        """
-
-        if concrete_volume_m3 <= 0:
-            raise ValueError(
-                "Concrete volume must be greater than zero."
-            )
+    def calculate_concrete_materials(self, concrete_volume_m3: float) -> dict:
+        wastage_percent = 5.0
+        wastage_quantity = concrete_volume_m3 * wastage_percent / 100
+        total_concrete_volume = concrete_volume_m3 + wastage_quantity
 
         dry_volume = (
-            concrete_volume_m3
+            total_concrete_volume
             * DEFAULT_CONCRETE_DRY_VOLUME_FACTOR
         )
 
-        cement_ratio = DEFAULT_CONCRETE_CEMENT_RATIO
-        sand_ratio = DEFAULT_CONCRETE_SAND_RATIO
-        aggregate_ratio = DEFAULT_CONCRETE_AGGREGATE_RATIO
-
         total_ratio = (
-            cement_ratio
-            + sand_ratio
-            + aggregate_ratio
+            DEFAULT_CONCRETE_CEMENT_RATIO
+            + DEFAULT_CONCRETE_SAND_RATIO
+            + DEFAULT_CONCRETE_AGGREGATE_RATIO
         )
 
-        cement_volume_m3 = (
+        cement_volume = (
             dry_volume
-            * cement_ratio
+            * DEFAULT_CONCRETE_CEMENT_RATIO
             / total_ratio
         )
 
-        sand_volume_m3 = (
+        sand_volume = (
             dry_volume
-            * sand_ratio
+            * DEFAULT_CONCRETE_SAND_RATIO
             / total_ratio
         )
 
-        aggregate_volume_m3 = (
+        aggregate_volume = (
             dry_volume
-            * aggregate_ratio
+            * DEFAULT_CONCRETE_AGGREGATE_RATIO
             / total_ratio
         )
 
-        cement_weight_kg = (
-            cement_volume_m3
-            * 1440
-        )
-
-        cement_bags = (
-            cement_weight_kg
-            / CEMENT_BAG_WEIGHT_KG
-        )
+        cement_weight_kg = cement_volume * 1440.0
+        cement_bags = cement_weight_kg / CEMENT_BAG_WEIGHT_KG
 
         return {
-            "concrete_volume": round(
-                concrete_volume_m3,
-                3,
-            ),
-            "concrete_volume_unit": "m3",
-
-            "dry_volume": round(
-                dry_volume,
-                3,
-            ),
+            "material": "concrete",
+            "base_quantity": round(concrete_volume_m3, 3),
+            "base_unit": "m3",
+            "wastage_percent": wastage_percent,
+            "wastage_quantity": round(wastage_quantity, 3),
+            "total_quantity": round(total_concrete_volume, 3),
+            "total_unit": "m3",
+            "dry_volume": round(dry_volume, 3),
             "dry_volume_unit": "m3",
-
             "cement": {
-                "quantity": round(
-                    cement_bags,
-                    2,
-                ),
+                "quantity": round(cement_bags, 2),
                 "unit": "bags",
-                "volume_m3": round(
-                    cement_volume_m3,
-                    3,
-                ),
-                "weight_kg": round(
-                    cement_weight_kg,
-                    2,
-                ),
+                "volume_m3": round(cement_volume, 3),
+                "weight_kg": round(cement_weight_kg, 2),
             },
-
             "sand": {
-                "quantity": round(
-                    sand_volume_m3,
-                    3,
-                ),
+                "quantity": round(sand_volume, 3),
                 "unit": "m3",
             },
-
             "aggregate": {
-                "quantity": round(
-                    aggregate_volume_m3,
-                    3,
-                ),
+                "quantity": round(aggregate_volume, 3),
                 "unit": "m3",
             },
-
-            "mix_ratio": (
-                f"{cement_ratio}:"
-                f"{sand_ratio}:"
-                f"{aggregate_ratio}"
-            ),
-
-            "dry_volume_factor": (
-                DEFAULT_CONCRETE_DRY_VOLUME_FACTOR
-            ),
-
-            "assumption": True,
+            "mix_ratio": "1:2:4",
+            "dry_volume_factor": DEFAULT_CONCRETE_DRY_VOLUME_FACTOR,
         }
 
     def calculate_plaster_quantity(
@@ -388,7 +413,8 @@ class QuantityCalculator:
         wall_height_ft: float,
     ) -> Dict[str, Any]:
         """
-        Calculate gross plaster quantity for both sides of walls.
+        Calculate gross plaster quantity for both sides of walls
+        and estimate cement/sand components using a 1:4 mix ratio.
 
         This is an estimation-level calculation.
         Door and window opening deductions will be handled separately
@@ -417,6 +443,49 @@ class QuantityCalculator:
             * plaster_thickness_m
         )
 
+        wastage_quantity = (
+            plaster_volume_m3
+            * DEFAULT_MASONRY_WASTAGE_PERCENT
+            / 100
+        )
+
+        total_plaster_volume_m3 = (
+            plaster_volume_m3
+            + wastage_quantity
+        )
+
+        dry_volume = (
+            total_plaster_volume_m3
+            * DEFAULT_CONCRETE_DRY_VOLUME_FACTOR
+        )
+
+        cement_ratio = DEFAULT_PLASTER_CEMENT_RATIO
+        sand_ratio = DEFAULT_PLASTER_SAND_RATIO
+
+        total_ratio = (
+            cement_ratio
+            + sand_ratio
+        )
+
+        cement_volume_m3 = (
+            dry_volume
+            * cement_ratio
+            / total_ratio
+        )
+
+        sand_volume_m3 = (
+            dry_volume
+            * sand_ratio
+            / total_ratio
+        )
+
+        cement_weight_kg = cement_volume_m3 * 1440.0
+
+        cement_bags = (
+            cement_weight_kg
+            / CEMENT_BAG_WEIGHT_KG
+        )
+
         return {
             "material": "plaster",
             "wall_surface_area": round(
@@ -430,7 +499,52 @@ class QuantityCalculator:
                 plaster_volume_m3,
                 3,
             ),
+                        "wastage_percent": DEFAULT_MASONRY_WASTAGE_PERCENT,
+            "wastage_quantity": round(
+                wastage_quantity,
+                3,
+            ),
+            "total_quantity": round(
+                total_plaster_volume_m3,
+                3,
+            ),
+            "total_unit": "m3",
+            
             "base_unit": "m3",
+            "dry_volume": round(
+                dry_volume,
+                3,
+            ),
+            "dry_volume_unit": "m3",
+            "cement": {
+                "quantity": round(
+                    cement_bags,
+                    2,
+                ),
+                "unit": "bags",
+                "volume_m3": round(
+                    cement_volume_m3,
+                    3,
+                ),
+                "weight_kg": round(
+                    cement_weight_kg,
+                    2,
+                ),
+            },
+            "sand": {
+                "quantity": round(
+                    sand_volume_m3,
+                    3,
+                ),
+                "unit": "m3",
+            },
+            "mix_ratio": (
+                f"{cement_ratio}:"
+                f"{sand_ratio}"
+            ),
+            "dry_volume_factor": (
+                DEFAULT_CONCRETE_DRY_VOLUME_FACTOR
+            ),
         }
 
     def calculate_quick(
@@ -453,6 +567,11 @@ class QuantityCalculator:
 
         bricks = self.calculate_brick_quantity(
             masonry["total_quantity"]
+        )
+
+        mortar = self.calculate_mortar_quantity(
+            masonry["total_quantity"],
+            bricks["brick_count"],
         )
 
         plaster = self.calculate_plaster_quantity(
@@ -480,6 +599,7 @@ class QuantityCalculator:
                 flooring,
                 masonry,
                 bricks,
+                mortar,
                 plaster,
                 concrete,
                 steel,
@@ -493,6 +613,16 @@ class QuantityCalculator:
                 {
                     "name": "masonry_wastage",
                     "value": DEFAULT_MASONRY_WASTAGE_PERCENT,
+                    "unit": "percent",
+                },
+                {
+                    "name": "concrete_wastage",
+                    "value": 5.0,
+                    "unit": "percent",
+                },
+                {
+                    "name": "reinforcement_steel_wastage",
+                    "value": 5.0,
                     "unit": "percent",
                 },
                 {

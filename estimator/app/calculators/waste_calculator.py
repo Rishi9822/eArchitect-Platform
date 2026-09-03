@@ -1,43 +1,23 @@
 class WasteCalculator:
     """
-    Calculates additional waste cost for materials.
+    Reports additional waste cost.
 
-    Materials whose wastage is already included in the quantity
-    calculation are excluded here to prevent double counting.
+    Material wastage is already handled by the quantity calculators,
+    so no additional global waste percentage is applied here.
     """
-
-    EXCLUDED_MATERIALS = {
-        "flooring",
-        "masonry",
-    }
-
-    DEFAULT_WASTE_PERCENT = 5.0
 
     def calculate_waste_cost(
         self,
         material_costs: list[dict],
-        waste_percent: float = DEFAULT_WASTE_PERCENT,
     ) -> dict:
         """
-        Calculate additional waste cost for eligible materials.
+        Return zero additional waste cost because wastage
+        is handled during quantity calculation.
         """
 
-        eligible_items = [
-            item
-            for item in material_costs
-            if item["material"] not in self.EXCLUDED_MATERIALS
-        ]
-
-        base_cost = sum(
-            item["total_cost"]
-            for item in eligible_items
-        )
-
-        waste_cost = base_cost * (waste_percent / 100)
-
         return {
-            "basis": "eligible_material_cost",
-            "waste_percent": waste_percent,
-            "eligible_material_cost": round(base_cost, 2),
-            "waste_cost": round(waste_cost, 2),
+            "basis": "quantity_level_wastage",
+            "waste_percent": 0.0,
+            "eligible_material_cost": 0.0,
+            "waste_cost": 0.0,
         }

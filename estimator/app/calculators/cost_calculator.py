@@ -93,14 +93,82 @@ class CostCalculator:
 
             quantity = None
 
-            if "total_quantity" in material_data:
-                quantity = material_data["total_quantity"]
+            if material == "masonry":
+                continue
+
 
             elif material == "bricks":
                 quantity = material_data.get("brick_count")
 
             elif material == "plaster":
-                quantity = material_data.get("base_quantity")
+                plaster_materials = []
+
+                cement = material_data.get("cement", {})
+                sand = material_data.get("sand", {})
+
+                if cement.get("quantity") is not None:
+                    plaster_materials.append(
+                        {
+                            **self.calculate_cost(
+                                quantity=cement["quantity"],
+                                city=city,
+                                material="cement",
+                                finish_tier=finish_tier,
+                            ),
+                            "source": "plaster",
+                        }
+                    )
+
+                if sand.get("quantity") is not None:
+                    plaster_materials.append(
+                        {
+                            **self.calculate_cost(
+                                quantity=sand["quantity"],
+                                city=city,
+                                material="sand",
+                                finish_tier=finish_tier,
+                            ),
+                            "source": "plaster",
+                        }
+                    )
+
+                costs.extend(plaster_materials)
+                continue
+
+            elif material == "mortar":
+                mortar_materials = []
+
+                cement = material_data.get("cement", {})
+                sand = material_data.get("sand", {})
+
+                if cement.get("quantity") is not None:
+                    mortar_materials.append(
+                        {
+                        **self.calculate_cost(
+                            quantity=cement["quantity"],
+                            city=city,
+                            material="cement",
+                            finish_tier=finish_tier,
+                        ),
+                        "source": "mortar",
+                        }
+                    )
+
+                if sand.get("quantity") is not None:
+                    mortar_materials.append(
+                        {
+                        **self.calculate_cost(
+                            quantity=sand["quantity"],
+                            city=city,
+                            material="sand",
+                            finish_tier=finish_tier,
+                        ),
+                        "source": "mortar",
+                        }
+                    )
+
+                costs.extend(mortar_materials)
+                continue
 
             elif material == "concrete":
                 concrete_materials = []
@@ -111,39 +179,51 @@ class CostCalculator:
 
                 if cement.get("quantity") is not None:
                     concrete_materials.append(
-                        self.calculate_cost(
+                        {
+                        **self.calculate_cost(
                             quantity=cement["quantity"],
                             city=city,
                             material="cement",
                             finish_tier=finish_tier,
-                        )
+                        ),
+                        "source": "concrete",
+                        }
                     )
 
                 if sand.get("quantity") is not None:
                     concrete_materials.append(
-                        self.calculate_cost(
+                        {
+                        **self.calculate_cost(
                             quantity=sand["quantity"],
                             city=city,
                             material="sand",
                             finish_tier=finish_tier,
-                        )
+                        ),
+                        "source": "concrete",
+                        }
                     )
 
                 if aggregate.get("quantity") is not None:
                     concrete_materials.append(
-                        self.calculate_cost(
+                        {
+                        **self.calculate_cost(
                             quantity=aggregate["quantity"],
                             city=city,
                             material="aggregate",
                             finish_tier=finish_tier,
-                        )
+                        ),
+                        "source": "concrete",
+                        }
                     )
 
                 costs.extend(concrete_materials)
                 continue
 
             elif material == "reinforcement_steel":
-                quantity = material_data.get("quantity")
+                quantity = material_data.get("total_quantity")
+
+            elif "total_quantity" in material_data:
+                quantity = material_data["total_quantity"]
 
             if quantity is None:
                 continue
@@ -158,6 +238,49 @@ class CostCalculator:
             )
 
         return costs
+
+    def aggregate_material_costs(
+        self,
+        material_costs: list[dict],
+    ) -> list[dict]:
+        """
+        Aggregate duplicate material cost entries while
+        preserving the source breakdown.
+        """
+
+        aggregated = {}
+
+        for item in material_costs:
+            material = item["material"]
+
+            if material not in aggregated:
+                aggregated[material] = {
+                    "material": material,
+                    "city": item["city"],
+                    "finish_tier": item["finish_tier"],
+                    "rate": item["rate"],
+                    "unit": item["unit"],
+                    "quantity": 0.0,
+                    "total_cost": 0.0,
+                    "breakdown": [],
+                }
+
+            aggregated[material]["quantity"] += item["quantity"]
+            aggregated[material]["total_cost"] += item["total_cost"]
+
+            aggregated[material]["breakdown"].append(
+                {
+                    "source": item.get("source", "direct"),
+                    "quantity": item["quantity"],
+                    "total_cost": item["total_cost"],
+                }
+            )
+
+        for item in aggregated.values():
+            item["quantity"] = round(item["quantity"], 3)
+            item["total_cost"] = round(item["total_cost"], 2)
+
+        return list(aggregated.values())
 
     def calculate_total_material_cost(
         self,
@@ -180,7 +303,8 @@ class CostCalculator:
         finish_tier: str,
     ) -> dict:
         """
-        Calculate material-level costs and the total material cost.
+        Calculate material-level costs and aggregate
+        duplicate material entries.
         """
 
         material_costs = self.calculate_material_costs(
@@ -189,12 +313,16 @@ class CostCalculator:
             finish_tier=finish_tier,
         )
 
-        total_material_cost = self.calculate_total_material_cost(
+        aggregated_material_costs = self.aggregate_material_costs(
             material_costs
         )
 
+        total_material_cost = self.calculate_total_material_cost(
+            aggregated_material_costs
+        )
+
         return {
-            "items": material_costs,
+            "items": aggregated_material_costs,
             "total_material_cost": total_material_cost,
         }
 
