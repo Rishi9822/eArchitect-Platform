@@ -1,4 +1,8 @@
+import json
+from pathlib import Path
+
 from app.calculators.cost_calculator import CostCalculator
+from app.calculators.quantity_calculator import QuantityCalculator
 
 
 def test_steel_cost_uses_total_quantity():
@@ -154,3 +158,56 @@ def test_full_material_cost_total():
     )
 
     assert result == 956961.0
+
+
+def test_layout_quantities_are_compatible_with_cost_calculator():
+    fixture_path = (
+        Path(__file__).parent
+        / "fixtures"
+        / "layout_candidate.json"
+    )
+
+    with open(fixture_path, "r", encoding="utf-8") as file:
+        layout = json.load(file)
+
+    project = {
+        "built_up_area_sqft": 1500,
+        "wall_length_ft": 420,
+        "ceiling_height_ft": 10,
+        "rooms": 3,
+        "bathrooms": 2,
+        "wall_thickness_in": 9,
+        "flooring": "standard",
+        "city": "Nagpur",
+        "finish_tier": "standard",
+    }
+
+    quantity_calculator = QuantityCalculator()
+
+    quantities = quantity_calculator.calculate_layout(
+        project,
+        layout,
+    )
+
+    cost_calculator = CostCalculator()
+
+    result = cost_calculator.calculate_material_summary(
+        materials=quantities["materials"],
+        city=project["city"],
+        finish_tier=project["finish_tier"],
+    )
+
+    assert result["total_material_cost"] > 0
+    assert len(result["items"]) > 0
+
+    materials = {
+        item["material"]
+        for item in result["items"]
+    }
+
+    assert "flooring" in materials
+    assert "cement" in materials
+    assert "sand" in materials
+    assert "aggregate" in materials
+    assert "bricks" in materials
+    assert "reinforcement_steel" in materials

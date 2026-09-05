@@ -20,6 +20,7 @@ from app.core.constants import (
     DEFAULT_PLASTER_THICKNESS_M,
     DEFAULT_CONCRETE_AGGREGATE_RATIO,
     SQFT_TO_SQM,
+    FT_TO_M,
 )
 
 
@@ -329,6 +330,18 @@ class QuantityCalculator:
             * DEFAULT_CONCRETE_VOLUME_M3_PER_SQFT
         )
 
+        wastage_percent = 5.0
+        wastage_quantity = (
+            concrete_volume_m3
+            * wastage_percent
+            / 100
+        )
+
+        total_quantity = (
+            concrete_volume_m3
+            + wastage_quantity
+        )
+
         return {
             "material": "concrete",
             "base_quantity": round(
@@ -336,12 +349,21 @@ class QuantityCalculator:
                 3,
             ),
             "base_unit": "m3",
+            "wastage_percent": wastage_percent,
+            "wastage_quantity": round(
+                wastage_quantity,
+                3,
+            ),
+            "total_quantity": round(
+                total_quantity,
+                3,
+            ),
+            "total_unit": "m3",
             "basis": "built_up_area",
             "rate": DEFAULT_CONCRETE_VOLUME_M3_PER_SQFT,
             "rate_unit": "m3_per_sqft",
             "assumption": True,
         }
-
     def calculate_concrete_materials(self, concrete_volume_m3: float) -> dict:
         wastage_percent = 5.0
         wastage_quantity = concrete_volume_m3 * wastage_percent / 100
@@ -657,20 +679,89 @@ class QuantityCalculator:
                 "Layout does not contain a usable floor area."
             )
 
+        built_up_area_sqft = measurements.get(
+            "built_up_area_sqft"
+        )
+
+        if not built_up_area_sqft:
+            raise ValueError(
+                "Layout does not contain a usable built-up area."
+            )
+
         flooring = self.calculate_flooring_quantity(
             floor_area_sqft
+        )
+
+        concrete = self.calculate_concrete_volume(
+        built_up_area_sqft
+        )
+        concrete_materials = self.calculate_concrete_materials(
+        concrete["base_quantity"]
+        )
+        concrete.update(concrete_materials)
+
+        steel = self.calculate_steel_quantity(
+            built_up_area_sqft
+        )
+
+        total_wall_length_m = measurements.get(
+            "total_wall_length_m"
+        )
+
+        if not total_wall_length_m:
+            raise ValueError(
+                "Layout does not contain a usable total wall length."
+            )
+
+        wall_length_ft = total_wall_length_m / FT_TO_M
+
+        masonry = self.calculate_masonry_quantity(
+            wall_length_ft=wall_length_ft,
+            wall_height_ft=project["ceiling_height_ft"],
+            wall_thickness_in=project["wall_thickness_in"],
+        )
+
+
+        brick_count = self.calculate_brick_quantity(
+        masonry["total_quantity"]
+        )
+
+        mortar = self.calculate_mortar_quantity(
+        masonry_volume_m3=masonry["total_quantity"],
+        brick_count=brick_count["brick_count"],
+        )
+
+        plaster = self.calculate_plaster_quantity(
+        wall_length_ft=wall_length_ft,
+        wall_height_ft=project["ceiling_height_ft"],
         )
 
         return {
             "mode": "layout",
             "materials": [
                 flooring,
+                concrete,
+                steel,
+                masonry,
+                brick_count,
+                mortar,
+                plaster,
             ],
             "assumptions": [
                 {
                     "name": "flooring_wastage",
                     "value": DEFAULT_FLOORING_WASTAGE_PERCENT,
                     "unit": "percent",
-                }
+                },
+                {
+                    "name": "concrete_wastage",
+                    "value": 5.0,
+                    "unit": "percent",
+                },
+                {
+                    "name": "reinforcement_steel_wastage",
+                    "value": 5.0,
+                    "unit": "percent",
+                },
             ],
         }

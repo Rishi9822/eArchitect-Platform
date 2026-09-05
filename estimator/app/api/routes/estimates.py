@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
 from app.models.estimate import (
+    EstimateResponse,
     LayoutEstimateRequest,
     QuickEstimateRequest,
 )
@@ -16,7 +17,10 @@ router = APIRouter(
 estimation_service = EstimationService()
 
 
-@router.post("/quick")
+@router.post(
+    "/quick",
+    response_model=EstimateResponse,
+)
 def create_quick_estimate(request: QuickEstimateRequest):
     """
     Create a quick construction estimate.
@@ -25,7 +29,10 @@ def create_quick_estimate(request: QuickEstimateRequest):
     return estimation_service.create_quick_estimate(request)
 
 
-@router.post("/layout")
+@router.post(
+    "/layout",
+    response_model=EstimateResponse,
+)
 def create_layout_estimate(request: LayoutEstimateRequest):
     """
     Create an estimate using a selected geometry-engine layout.
