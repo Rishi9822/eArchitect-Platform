@@ -1,0 +1,58 @@
+{
+  "id": "candidate-001",
+  "strategy": "balanced",
+  "variation": "v1",
+  "rooms": [
+    {
+      "id": "room-1",
+      "type": "bedroom",
+      "area_sqft": 120.0
+    },
+    {
+      "id": "room-2",
+      "type": "bedroom",
+      "area_sqft": 110.0
+    },
+    {
+      "id": "room-3",
+      "type": "living_room",
+      "area_sqft": 180.0
+    }
+  ],
+  "corridors": [],
+  "walls": [],
+  "doors": [],
+  "windows": [],
+  "entrances": [],
+  "parking": [],
+  "dead_spaces": [],
+  "circulation": {},
+  "measurements": {
+    "plot_area_sqft": 2000.0,
+    "plot_area_sqm": 185.806,
+    "buildable_area_sqft": 1700.0,
+    "buildable_area_sqm": 157.935,
+    "room_area_sqft": 410.0,
+    "room_area_sqm": 38.090,
+    "built_up_area_sqft": 1500.0,
+    "built_up_area_sqm": 139.355,
+    "exterior_wall_length_m": 35.0,
+    "interior_wall_length_m": 45.0,
+    "total_wall_length_m": 80.0,
+    "total_door_count": 4,
+    "total_window_count": 6,
+    "floor_area_sqft": 1500.0,
+    "floor_area_sqm": 139.355,
+    "roof_area_sqft": 1500.0,
+    "roof_area_sqm": 139.355
+  },
+  "metrics": {},
+  "score": {},
+  "validation": {
+    "valid": true,
+    "warnings": [],
+    "errors": []
+  },
+  "timings": {},
+  "rank": 1
+}
